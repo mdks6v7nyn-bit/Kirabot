@@ -1,5 +1,5 @@
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 from aiohttp import web
 import os
 from openai import OpenAI
@@ -10,7 +10,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 
-# === GPT RESPONSE ===
+# === GPT ANSWER ===
 async def ask_gpt(text):
     result = client.chat.completions.create(
         model="gpt-4o-mini",
@@ -18,9 +18,8 @@ async def ask_gpt(text):
             {
                 "role": "system",
                 "content": (
-                    "You are KiraBot — an AI assistant for both English and Russian users.\n"
-                    "Автоматически определяй язык пользователя (английский или русский) "
-                    "и отвечай на том же языке. Be friendly, helpful, short and clear."
+                    "You are KiraBot — a bilingual assistant. "
+                    "Автоматически определяй язык пользователя и отвечай на том же."
                 )
             },
             {"role": "user", "content": text}
@@ -30,51 +29,48 @@ async def ask_gpt(text):
 
 
 # === /start ===
-async def start(update: Update, context):
-    text_ru = (
-        "🔥 Привет! Я KiraBot.\n\n"
-        "Я умею:\n"
-        "• Генерировать картинки\n"
-        "• Отвечать на вопросы\n"
-        "• Переводить\n"
-        "• Анализировать фото\n"
-        "Просто напиши любой запрос!"
-    )
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    lang = update.message.from_user.language_code
 
-    text_en = (
-        "🔥 Hello! I'm KiraBot.\n\n"
-        "I can:\n"
-        "• Generate images\n"
-        "• Answer questions\n"
-        "• Translate\n"
-        "• Analyze photos\n"
-        "Just send me any request!"
-    )
-
-    # Detect language
-    user_language = update.message.from_user.language_code
-
-    if user_language.startswith("ru"):
-        await update.message.reply_text(text_ru)
+    if lang.startswith("ru"):
+        text = (
+            "🔥 Привет! Я KiraBot.\n\n"
+            "Я умею:\n"
+            "• Создавать картинки\n"
+            "• Отвечать на вопросы\n"
+            "• Переводить\n"
+            "• Анализировать фото\n"
+            "Напиши что-нибудь!"
+        )
     else:
-        await update.message.reply_text(text_en)
+        text = (
+            "🔥 Hello! I'm KiraBot.\n\n"
+            "I can:\n"
+            "• Create images\n"
+            "• Answer questions\n"
+            "• Translate\n"
+            "• Analyze photos\n"
+            "Send me a message!"
+        )
+
+    await update.message.reply_text(text)
 
 
-# === Handle normal messages ===
-async def handle_message(update: Update, context):
-    text = update.message.text
-    response = await ask_gpt(text)
-    await update.message.reply_text(response)
+# === TEXT HANDLER ===
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_text = update.message.text
+    answer = await ask_gpt(user_text)
+    await update.message.reply_text(answer)
 
 
 # === TELEGRAM APP ===
 telegram_app = Application.builder().token(TELEGRAM_TOKEN).build()
 
 telegram_app.add_handler(CommandHandler("start", start))
-telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
 
-# === WEBHOOK (Render) ===
+# === WEBHOOK HANDLER (Render) ===
 async def webhook_handler(request):
     data = await request.json()
     update = Update.de_json(data, telegram_app.bot)
@@ -82,7 +78,7 @@ async def webhook_handler(request):
     return web.Response(text="ok")
 
 
-# === START SERVER ===
+# === RUN SERVER ===
 app = web.Application()
 app.router.add_post("/", webhook_handler)
 
